@@ -12,7 +12,7 @@ import numpy as np
 import pickle
 from typing import List, Tuple, Dict, Iterator
 
-def add_dpr_score(results: list, pembeddings: str, qembeddings: str, alpha: float, sparse_score_type: str) -> list:
+def add_dpr_score(results: list, pembeddings: str, qembeddings: str, alpha: float) -> list:
     pembeddings_map = dict()
     with open(pembeddings, 'rb') as f:
         while True:
@@ -48,15 +48,8 @@ def add_dpr_score(results: list, pembeddings: str, qembeddings: str, alpha: floa
         for p_idx, p_row in enumerate(q_row['ctxs']):
             pid = p_row['id']
             p_vector = pembeddings_map[pid]
-
-            results[q_idx]['ctxs'][p_idx]['dpr_score'] = (dot_product(q_vector, p_vector)-min_dpr_score)/max_dpr_score
-            results[q_idx]['ctxs'][p_idx]['total_score'] = alpha*results[q_idx]['ctxs'][p_idx]['dpr_score']
-            if sparse_score_type.lower()=='bm25':
-                results[q_idx]['ctxs'][p_idx]['total_score'] += (1-alpha)*results[q_idx]['ctxs'][p_idx]['bm25_score']
-            elif sparse_score_type.lower()=='lmd':
-                results[q_idx]['ctxs'][p_idx]['total_score'] += (1-alpha)*results[q_idx]['ctxs'][p_idx]['lmd_score']
-            else:
-                results[q_idx]['ctxs'][p_idx]['total_score'] += (1-alpha)*results[q_idx]['ctxs'][p_idx]['classic_score']
+            dpr_score = (dot_product(q_vector, p_vector)-min_dpr_score)/max_dpr_score
+            results[q_idx]['ctxs'][p_idx]['total_score'] =  (1-alpha)*results[q_idx]['ctxs'][p_idx]['total_score']+alpha*dpr_score
     return results
 
 
@@ -120,7 +113,7 @@ def main():
         #Hyperparameter tuning
         best_score = -float('inf')
         for alpha in alphas:
-            query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, alpha, 'bm25')
+            query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, alpha)
             query_results = rank_results(query_results, args.topk)
             precision, mrr, bpref, map_score = get_eval_scores(query_results, gold_results)
             all_scores['bm25']['precision'].append(precision)
@@ -132,7 +125,7 @@ def main():
                 best_bm25_alpha = alpha
         assert len(all_scores['bm25']['precision']) == len(alphas)
 
-        query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_bm25_alpha, 'bm25')
+        query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_bm25_alpha)
         query_results = rank_results(query_results, args.topk)
         with open("dpr-bm25_query_results.json", 'w') as f:
             json.dump(query_results, f)
@@ -145,7 +138,7 @@ def main():
         #hyperparameter tuning
         best_score = -float('inf')
         for alpha in alphas:
-            query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, alpha, 'lmd')
+            query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, alpha)
             query_results = rank_results(query_results, args.topk)
             precision, mrr, bpref, map_score = get_eval_scores(query_results, gold_results)
             all_scores['lmd']['precision'].append(precision)
@@ -157,7 +150,7 @@ def main():
                 best_lmd_alpha = alpha
         assert len(all_scores['lmd']['precision']) == len(alphas)
 
-        query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_lmd_alpha, 'lmd')
+        query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_lmd_alpha)
         query_results = rank_results(query_results, args.topk)
         with open("dpr-lmd_query_results.json", 'w') as f:
             json.dump(query_results, f)
@@ -170,7 +163,7 @@ def main():
         #hyperparameter tuning
         best_score = -float('inf')
         for alpha in alphas:
-            query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, alpha, 'classic')
+            query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, alpha)
             query_results = rank_results(query_results, args.topk)
             precision, mrr, bpref, map_score = get_eval_scores(combined_query_results, gold_results)
             all_scores['tfidf']['precision'].append(precision)
@@ -182,7 +175,7 @@ def main():
                 best_tfidf_alpha = alpha
         assert len(all_scores['tfidf']['precision']) == len(alphas)
         print(best_tfidf_alpha)
-        query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_tfidf_alpha, 'classic')
+        query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_tfidf_alpha)
         query_results = rank_results(query_results, args.topk)
         with open("dpr-classic_query_results.json", 'w') as f:
             json.dump(query_results, f)

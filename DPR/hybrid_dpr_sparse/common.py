@@ -93,7 +93,7 @@ def add_bm25_score(results: list, corpus: dict, k1=1.2, b=0.75) -> list:
             min_bm25_score = min(min_bm25_score, score)
         for p_idx, p_row in enumerate(q_row['ctxs']):
             pid = p_row['id']
-            results[q_idx]['ctxs'][p_idx]['bm25_score'] = (bm25_query_score(query, pid, passages_freq_map, terms_freq_map, corpus, avgdl, N, k1, b)-min_bm25_score)/(max_bm25_score-min_bm25_score)
+            results[q_idx]['ctxs'][p_idx]['total_score'] = (bm25_query_score(query, pid, passages_freq_map, terms_freq_map, corpus, avgdl, N, k1, b)-min_bm25_score)/(max_bm25_score-min_bm25_score)
     return results
 
 def lmd_init(docs_dict: dict) -> Tuple[dict, dict, dict, float]:
@@ -139,7 +139,7 @@ def add_lmd_score(results: list, corpus: dict, miu=2000) -> list:
             min_lmd_score = min(min_lmd_score, score)
         for p_idx, p_row in enumerate(q_row['ctxs']):
             pid = p_row['id']
-            results[q_idx]['ctxs'][p_idx]['lmd_score'] = (lmd_query_score(query, pid, term_maps, total_term_maps, total_words, collection_maps, miu)-min_lmd_score)/(max_lmd_score-min_lmd_score)
+            results[q_idx]['ctxs'][p_idx]['total_score'] = (lmd_query_score(query, pid, term_maps, total_term_maps, total_words, collection_maps, miu)-min_lmd_score)/(max_lmd_score-min_lmd_score)
     return results
 
 def dot_product(x, y) -> np.float64:
@@ -215,7 +215,7 @@ def add_classic_score(results: list, corpus: dict) -> list:
             pid = p_row['id']
             doc = p_row['title']
             doc += f". {p_row['text']}" if p_row['text'] != "" else ""
-            results[q_idx]['ctxs'][p_idx]['classic_score'] = (classic_query_score(query, doc, pid, passages_freq_map, terms_freq_map, N, terms_list, term2idx, doc_vectors)-min_classic_score)/(max_classic_score-min_classic_score)
+            results[q_idx]['ctxs'][p_idx]['total_score'] = (classic_query_score(query, doc, pid, passages_freq_map, terms_freq_map, N, terms_list, term2idx, doc_vectors)-min_classic_score)/(max_classic_score-min_classic_score)
     print(doc_vectors)
     return results
 

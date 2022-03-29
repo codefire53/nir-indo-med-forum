@@ -9,7 +9,7 @@ import numpy as np
 import numpy as np
 import pickle
 
-def add_dpr_score(results: list, pembeddings: str, qembeddings: str, alpha: float, beta: float,  sparse_score_type: str) -> list:
+def add_dpr_score(results: list, pembeddings: str, qembeddings: str, alpha: float, beta: float) -> list:
     pembeddings_map = dict()
     with open(pembeddings, 'rb') as f:
         while True:
@@ -45,15 +45,8 @@ def add_dpr_score(results: list, pembeddings: str, qembeddings: str, alpha: floa
         for p_idx, p_row in enumerate(q_row['ctxs']):
             pid = p_row['id']
             p_vector = pembeddings_map[pid]
-
-            results[q_idx]['ctxs'][p_idx]['dpr_score'] = (dot_product(q_vector, p_vector)-min_dpr_score)/max_dpr_score
-            results[q_idx]['ctxs'][p_idx]['total_score'] = beta*results[q_idx]['ctxs'][p_idx]['dpr_score']
-            if sparse_score_type.lower()=='bm25':
-                results[q_idx]['ctxs'][p_idx]['total_score'] += alpha*results[q_idx]['ctxs'][p_idx]['bm25_score']
-            elif sparse_score_type.lower()=='lmd':
-                results[q_idx]['ctxs'][p_idx]['total_score'] += alpha*results[q_idx]['ctxs'][p_idx]['lmd_score']
-            else:
-                results[q_idx]['ctxs'][p_idx]['total_score'] += alpha*results[q_idx]['ctxs'][p_idx]['classic_score']
+            dpr_score = (dot_product(q_vector, p_vector)-min_dpr_score)/max_dpr_score
+            results[q_idx]['ctxs'][p_idx]['total_score'] = alpha*results[q_idx]['ctxs'][p_idx]['total_score']+beta*dpr_score
     return results
 
 def main():
@@ -85,7 +78,7 @@ def main():
         print("Evaluate BM25-DPR")
         combined_query_results = join_results(args.dpr_query_result, args.bm25_query_result)
         combined_query_results = add_bm25_score(combined_query_results, corpus)
-        query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_alpha_bm25, best_beta_bm25, 'bm25')
+        query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_alpha_bm25, best_beta_bm25)
         query_results = rank_results(query_results, args.topk)
         with open("dpr-bm25-v2_query_results.json", 'w') as f:
             json.dump(query_results, f)
@@ -94,7 +87,7 @@ def main():
         print("Evaluate LMDirichlet-DPR")
         combined_query_results = join_results(args.dpr_query_result, args.lmd_query_result)
         combined_query_results = add_lmd_score(combined_query_results, corpus)
-        query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_alpha_lmd, best_beta_lmd, 'lmd')
+        query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_alpha_lmd, best_beta_lmd)
         query_results = rank_results(query_results, args.topk)
         with open("dpr-lmd-v2_query_results.json", 'w') as f:
             json.dump(query_results, f)
@@ -103,7 +96,7 @@ def main():
         print("Evaluate TFIDF-DPR")
         combined_query_results = join_results(args.dpr_query_result, args.classic_query_result)
         combined_query_results = add_classic_score(combined_query_results, corpus)
-        query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_alpha_classic, best_beta_classic, 'classic')
+        query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_alpha_classic, best_beta_classic)
         query_results = rank_results(query_results, args.topk)
         with open("dpr-classic-v2_query_results.json", 'w') as f:
             json.dump(query_results, f)

@@ -43,26 +43,6 @@ def add_dpr_score(results: list, pembeddings: str, qembeddings: str) -> list:
 
 
 
-
-def get_eval_scores(actual_results: list, gold_results: list) -> Tuple[float, float, float, float]:
-    #retrieve ground truth
-    rel_data_dict = dict()
-    negrel_data_dict = dict()
-    for row in gold_results:
-        rel_data_dict[row['question']['id']] = []
-        negrel_data_dict[row['question']['id']] = []
-        for ctx in row['ctxs']:
-            rel_data_dict[row['question']['id']].append(ctx['id'])
-        for ctx in row['neg_ctxs']:
-            negrel_data_dict[row['question']['id']].append(ctx['id'])
-
-    
-    #gather scores
-    precision = calc_retrieval_score(actual_results, rel_data_dict, negrel_data_dict, 'precision')
-    mrr = calc_retrieval_score(actual_results, rel_data_dict, negrel_data_dict, 'mrr')
-    bpref = calc_retrieval_score(actual_results, rel_data_dict, negrel_data_dict, 'bpref')
-    map_score = calc_retrieval_score(actual_results, rel_data_dict, negrel_data_dict, 'map')
-
     return precision, mrr, bpref, map_score
 def main():
     parser = argparse.ArgumentParser()
