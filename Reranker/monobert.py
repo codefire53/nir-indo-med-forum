@@ -1,7 +1,3 @@
-"""Code to train and eval a BERT passage re-ranker on the MS MARCO dataset."""
-
-
-
 import os
 import time
 import random
