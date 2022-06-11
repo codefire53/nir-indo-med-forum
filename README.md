@@ -16,15 +16,15 @@ This repository all source codes for DPR application on Indonesian Consumer Heal
 
 ## Directories Organization
 
-a. Analysis: Contains several notebooks for analysis like statistical testing, error analysis, etc.
-b. Baseline: Sparse retriever model implementations
-c. DPR: DPR and its variations implementations
-d. Reranker: monoBERT implementation
+1. Analysis: Contains several notebooks for analysis like statistical testing, error analysis, etc.
+2. Baseline: Sparse retriever model implementations
+3. DPR: DPR and its variations implementations
+4. Reranker: monoBERT implementation
 
 ## Files Organization
 
-a. eval.py: Score evaluation 
-b. preprocess.ipynb: Data preprocessing notebook
+1. eval.py: Score evaluation 
+2. preprocess.ipynb: Data preprocessing notebook
 
 ## Additional Resources
 
