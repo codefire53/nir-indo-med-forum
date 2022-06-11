@@ -23,7 +23,7 @@ This repository all source codes for DPR application on Indonesian Consumer Heal
 
 ## Files Organization
 
-1. eval.py: Score evaluation 
+1. eval.py: Score evaluation. Also can produce score per query that can be used for statistical significance test by supplying --statistical_test_file param.
 2. preprocess.ipynb: Data preprocessing notebook
 
 ## Additional Resources
