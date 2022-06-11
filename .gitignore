@@ -129,8 +129,10 @@ dmypy.json
 .pyre/
 
 # Ignore several folders
+./Dataset/**/*
+./Figures/**/*
+./ID-Stopwords/**/*
 ./Results/**/*
-
 
 
 # Ignore datasets
