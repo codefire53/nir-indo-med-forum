@@ -15,12 +15,14 @@ from org.apache.lucene.store import Directory, ByteBuffersDirectory
 
 from typing import List, Tuple
 
+import string
 import csv
 import json
 import os
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import re
 
 def setup_indexer_classes():
 	analyzer = StandardAnalyzer()
@@ -31,25 +33,49 @@ def setup_indexer_classes():
 	return analyzer, index, index_writer_config, index_writer
 
 def create_index(corpus_path, index_writer):
-    print("Create Index!")
-    passage_cnt = 0
-    with open(corpus_path, 'r') as f:
-        reader = csv.reader(f, delimiter='\t')
-        for row in tqdm(reader):
-            pid = row[0]
-            text = row[1].replace(",", " ")
-            title = row[2].replace(",", " ")
-            full_text = f"{title}. {text}"
-            document = Document()
-            document.add(StringField("question_id", pid, Field.Store.YES))
-            document.add(TextField("question_title", title, Field.Store.YES))
-            document.add(TextField("question_detail", text, Field.Store.YES))
-            document.add(TextField("question_title_detail", full_text, Field.Store.YES))
-            index_writer.addDocument(document)
-            passage_cnt += 1
-    print(f"{passage_cnt} passages successfully indexed!")
-    index_writer.close()
+	print("Create Index!")
+	passage_cnt = 0
+	if corpus_path.endswith('.tsv'):
+		with open(corpus_path, 'r') as f:
+			reader = csv.reader(f, delimiter='\t')
+			for row in tqdm(reader):
+				pid = row[0]
+				text = row[1].replace(",", " ")
+				title = row[2].replace(",", " ")
+				full_text = f"{title}. {text}"
+				document = Document()
+				document.add(StringField("question_id", pid, Field.Store.YES))
+				document.add(TextField("question_title", title, Field.Store.YES))
+				document.add(TextField("question_detail", text, Field.Store.YES))
+				document.add(TextField("question_title_detail", full_text, Field.Store.YES))
+				index_writer.addDocument(document)
+				passage_cnt += 1
+	else:
+		with open(corpus_path, 'r') as f:
+			json_list = list(f)
+		for json_instance in tqdm(json_list):
+			json_instance = json.loads(json_instance)
+			pid = json_instance['docid']
+			text = json_instance['text'].replace("," ," ")
+			title = json_instance['title'].replace(",", " ")
+			full_text = f"{title}. {text}"
+			document = Document()
+			document.add(StringField("question_id", pid, Field.Store.YES))
+			document.add(TextField("question_title", title, Field.Store.YES))
+			document.add(TextField("question_detail", text, Field.Store.YES))
+			document.add(TextField("question_title_detail", full_text, Field.Store.YES))
+			index_writer.addDocument(document)
+			passage_cnt += 1
+	print(f"{passage_cnt} passages successfully indexed!")
+	index_writer.close()
 
+def remove_punct(text):
+	puncts =  [punct for punct in string.punctuation if punct!='.']
+	for c in puncts:
+		text= text.replace(c,"")
+	text=text.strip()
+	text = re.sub("\s+"," ",text)
+	return text
 
 def question_queries(query_type: str, query_path: str) -> Tuple[List[str], List[dict]] :
 	print("Parse queries!")
@@ -58,8 +84,9 @@ def question_queries(query_type: str, query_path: str) -> Tuple[List[str], List[
 	with open(query_path, 'r') as f:
 		data = json.load(f)
 	for row in tqdm(data):
-		title = row['question']['title'].replace("?", "").replace(",", " ")
-		text = row['question']['text'].replace("?", "").replace(",", " ")
+
+		title = remove_punct(row['question']['title'])
+		text = remove_punct(row['question']['text'])
 		query = f"{title}. {text}" if query_type=='titledetail' else title
 		queries.append(query)
 		query_cnt +=1
@@ -107,9 +134,9 @@ def main():
 	parser.add_argument("--corpus_path", type=str, required=True)
 	parser.add_argument("--topk", type=int, default=10)
 	args = parser.parse_args()
-	assert args.query_path.endswith(".json") and args.corpus_path.endswith(".tsv")
+	assert args.query_path.endswith(".json") and (args.corpus_path.endswith(".tsv") or args.corpus_path.endswith(".jsonl"))
 	
-	experiment_combinations = ['title_title', 'title_titledetail', 'titledetail_titledetail']
+	experiment_combinations = ['titledetail_titledetail']
 	analyzer, index_directory, index_writer_config, index_writer = setup_indexer_classes()
 	create_index(args.corpus_path, index_writer)
 	searchers = [ClassicSimilarity(), BM25Similarity(), LMDirichletSimilarity()]
@@ -124,6 +151,7 @@ def main():
 		search_results = dict()
 		for name in searchers_name:
 			search_results[name] =  []
+		print(queries)
 		for idx, query in tqdm(enumerate(queries)):
 			query_parser = QueryParser("question_title", analyzer) if doc_type.lower() == 'title' else QueryParser("question_title_detail", analyzer)
 			query = query_parser.parse(query)

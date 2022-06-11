@@ -13,15 +13,25 @@ from typing import List, Tuple, Dict, Iterator
 
 def parse_corpus(corpus: str) -> dict:
     doc_map = dict()
-    with open(corpus, 'r') as f:
-        reader = csv.reader(f, delimiter='\t')
-        for row in reader:
-            full_text = row[2] if len(row) == 2 and row[2] is not None else ""
-            if full_text == "":
-                full_text = row[1]
-            else:
-                full_text += ". "+row[1]
-            doc_map[row[0]] = full_text
+    if corpus.endswith('tsv'):
+        with open(corpus, 'r') as f:
+            reader = csv.reader(f, delimiter='\t')
+            for row in reader:
+                full_text = row[2] if len(row) == 2 and row[2] is not None else ""
+                if full_text == "":
+                    full_text = row[1]
+                else:
+                    full_text += ". "+row[1]
+                doc_map[row[0]] = full_text
+    else:
+        json_list = []
+        with open(corpus, 'r') as f:
+            json_list =  list(f)
+            for json_row in json_list:
+                parsed_json = json.loads(json_row)
+                docid = parsed_json['docid']
+                full_text = f"{parsed_json['title']}. {parsed_json['text']}"
+                doc_map[docid] = full_text
     return doc_map
 
 def join_results(dpr_result: str, sparse_result: str) -> list:
@@ -93,7 +103,8 @@ def add_bm25_score(results: list, corpus: dict, k1=1.2, b=0.75) -> list:
             min_bm25_score = min(min_bm25_score, score)
         for p_idx, p_row in enumerate(q_row['ctxs']):
             pid = p_row['id']
-            results[q_idx]['ctxs'][p_idx]['total_score'] = (bm25_query_score(query, pid, passages_freq_map, terms_freq_map, corpus, avgdl, N, k1, b)-min_bm25_score)/(max_bm25_score-min_bm25_score)
+            results[q_idx]['ctxs'][p_idx]['sparse_score'] = (bm25_query_score(query, pid, passages_freq_map, terms_freq_map, corpus, avgdl, N, k1, b)-min_bm25_score)/(max_bm25_score-min_bm25_score)
+            results[q_idx]['ctxs'][p_idx]['total_score'] = results[q_idx]['ctxs'][p_idx]['sparse_score']
     return results
 
 def lmd_init(docs_dict: dict) -> Tuple[dict, dict, dict, float]:
@@ -139,7 +150,8 @@ def add_lmd_score(results: list, corpus: dict, miu=2000) -> list:
             min_lmd_score = min(min_lmd_score, score)
         for p_idx, p_row in enumerate(q_row['ctxs']):
             pid = p_row['id']
-            results[q_idx]['ctxs'][p_idx]['total_score'] = (lmd_query_score(query, pid, term_maps, total_term_maps, total_words, collection_maps, miu)-min_lmd_score)/(max_lmd_score-min_lmd_score)
+            results[q_idx]['ctxs'][p_idx]['sparse_score'] = (lmd_query_score(query, pid, term_maps, total_term_maps, total_words, collection_maps, miu)-min_lmd_score)/(max_lmd_score-min_lmd_score)
+            results[q_idx]['ctxs'][p_idx]['total_score'] = results[q_idx]['ctxs'][p_idx]['sparse_score']
     return results
 
 def dot_product(x, y) -> np.float64:
@@ -215,7 +227,8 @@ def add_classic_score(results: list, corpus: dict) -> list:
             pid = p_row['id']
             doc = p_row['title']
             doc += f". {p_row['text']}" if p_row['text'] != "" else ""
-            results[q_idx]['ctxs'][p_idx]['total_score'] = (classic_query_score(query, doc, pid, passages_freq_map, terms_freq_map, N, terms_list, term2idx, doc_vectors)-min_classic_score)/(max_classic_score-min_classic_score)
+            results[q_idx]['ctxs'][p_idx]['sparse_score'] = (classic_query_score(query, doc, pid, passages_freq_map, terms_freq_map, N, terms_list, term2idx, doc_vectors)-min_classic_score)/(max_classic_score-min_classic_score)
+            results[q_idx]['ctxs'][p_idx]['total_score'] = results[q_idx]['ctxs'][p_idx]['sparse_score']
     print(doc_vectors)
     return results
 

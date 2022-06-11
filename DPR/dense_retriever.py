@@ -34,6 +34,10 @@ from dpr.utils.data_utils import Tensorizer
 from dpr.utils.model_utils import setup_for_distributed_mode, get_model_obj, load_states_from_checkpoint
 from dpr.indexer.faiss_indexers import DenseIndexer, DenseHNSWFlatIndexer, DenseFlatIndexer
 
+import nltk
+from nltk.tokenize import word_tokenize
+nltk.download('punkt')
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 if (logger.hasHandlers()):
@@ -160,9 +164,31 @@ def load_passages(ctx_file: str) -> Dict[object, Tuple[str, str]]:
             for row in reader:
                 if row[0] != 'id':
                     docs[row[0]] = (row[1], row[2])
+    
+    elif ctx_file.endswith('.json'):
+        try:
+            with open(ctx_file , 'r') as f:
+                corpus_data = json.load(f)
+        except UnicodeDecodeError:
+            with open(ctx_file, 'r', encoding='utf-8') as f:
+                corpus_data = json.load(f)
+        for row in corpus_data:
+            docs[row['docid']] = (row['text'], row['title'])
+    
+    elif ctx_file.endswith('.jsonl'):
+        try:
+            with open(ctx_file, 'r') as f:
+                corpus_data_lst = list(f)
+        except UnicodeDecodeError:
+            with open(ctx_file, 'r', encoding='utf-8') as f:
+                corpus_data_lst = list(f)
+        for json_str in corpus_data_lst:
+            json_dict = json.loads(json_str)
+            docs[json_dict['docid']] = (json_dict['text'], json_dict['title'])
+
     else:
         with open(ctx_file) as tsvfile:
-            reader = csv.reader(tsvfile, delimiter='\t', )
+            reader = csv.reader(tsvfile, delimiter='\t')
             # file format: doc_id, doc_text, title
             for row in reader:
                 if row[0] != 'id':
@@ -202,6 +228,23 @@ def save_results(passages: Dict[object, Tuple[str, str]], questions: List[Tuple[
     with open(out_file_prettified, "w") as writer:
         writer.write(json.dumps(merged_data, indent=4) + "\n")
     logger.info('Saved results * scores  to %s(main file) & %s(prettified file)', out_file, out_file_prettified)
+
+def expand_question(text1, text2):
+    tokenized_text1 = list(word_tokenize(text1))[:]
+    tokenized_text2 = list(word_tokenize(text2))[:]
+    final_tokenized_text = tokenized_text1 + tokenized_text2
+    return " ".join(final_tokenized_text)
+
+def expand_questions(questions: List[Tuple[str, str]], top_passages_and_scores: List[Tuple[List[object], List[float]]], passages: Dict[object, Tuple[str, str]]) -> List[Tuple[str, str]]:
+    for  i, q in enumerate(questions):
+        results_and_scores = top_passages_and_scores[i]
+        docs = [passages[doc_id] for doc_id in results_and_scores[0]]
+        choosen_doc =  docs[0]
+        doc_text = choosen_doc[0]
+        doc_title = choosen_doc[1]
+        questions[i] = (f"{expand_question(q[0],doc_text)}", f"{expand_question(q[1], doc_title)}")
+    return questions
+
 
 def iterate_encoded_files(vector_files: list) -> Iterator[Tuple[object, np.array]]:
     for i, file in enumerate(vector_files):
@@ -269,6 +312,13 @@ def main(args):
         q_ids.append(q_id)
 
     questions_tensor = retriever.generate_question_vectors(questions)
+    
+    all_passages = load_passages(args.ctx_file)
+
+    if args.use_pseudo_feedback:
+        top_ids_and_scores_pseudo = retriever.get_top_docs(questions_tensor.numpy(), 1)
+        questions = expand_questions(questions, top_ids_and_scores_pseudo, all_passages)
+        questions_tensor = retriever.generate_question_vectors(questions)
 
     if args.out_encoded_question_file:
         print("Generate question embeddings!")
@@ -317,6 +367,7 @@ if __name__ == '__main__':
     parser.add_argument("--save_or_load_index", action='store_true', help='If enabled, save index')
     parser.add_argument("--embed_title", type=bool, default=True, help='Embed title to encoding')
     parser.add_argument("--out_encoded_question_file", type=str, default=None, help="Encoded question or question embedding output filename")
+    parser.add_argument("--use_pseudo_feedback", action='store_true', help="Enable pseudo relevance feedback")
 
 
     args = parser.parse_args()

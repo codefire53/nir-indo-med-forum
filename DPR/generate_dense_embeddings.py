@@ -17,6 +17,7 @@ import csv
 import logging
 import pickle
 from typing import List, Tuple
+import json
 
 import numpy as np
 import torch
@@ -100,14 +101,44 @@ def main(args):
     logger.info('reading data from file=%s', args.ctx_file)
 
     rows = []
-    with open(args.ctx_file) as tsvfile:
-        reader = csv.reader(tsvfile, delimiter='\t')
-        # file format: doc_id, doc_text, title
-        if args.embed_title:
-            rows.extend([(row[0], row[1], row[2]) for row in reader if row[0] != 'id']) 
-        # file format: doc_id, doc_text
-        else:
-            rows.extend([(row[0], row[1]) for row in reader if row[0] != 'id']) 
+    if args.ctx_file.endswith('.tsv'):
+        with open(args.ctx_file) as tsvfile:
+            reader = csv.reader(tsvfile, delimiter='\t')
+            # file format: doc_id, doc_text, title
+            if args.embed_title:
+                rows.extend([(row[0], row[1], row[2]) for row in reader if row[0] != 'id']) 
+            # file format: doc_id, doc_text
+            else:
+                rows.extend([(row[0], row[1]) for row in reader if row[0] != 'id']) 
+    
+    elif args.ctx_file.endswith('.jsonl'):
+        try:
+            with open(args.ctx_file, 'r') as f:
+                corpus_json = list(f)
+        except UnicodeDecodeError:
+            with open(args.ctx_file, 'r', encoding='utf-8') as f:
+                corpus_json = list(f)
+        for json_str in corpus_json:
+            row = dict()
+            json_row = json.loads(json_str)
+            if args.embed_title:
+                rows.append((json_row['docid'], json_row['text'], json_row['title']))
+            else:
+                rows.append((json_row['docid'], json_row['text']))
+
+    else:
+        try:    
+            with open(args.ctx_file, 'r') as f:
+                corpus_data = json.load(f)
+        except UnicodeDecodeError:
+            with open(args.ctx_file, 'r', encoding='utf-8') as f:
+                corpus_data = json.load(f)
+        for row in corpus_data:
+            if args.embed_title:
+                rows.append((row['docid'], row['text'], row['title']))
+            else:
+                rows.append((row['docid'], row['text']))
+
     shard_size = int(len(rows) / args.num_shards)
     start_idx = args.shard_id * shard_size
     end_idx = start_idx + shard_size

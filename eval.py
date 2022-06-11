@@ -9,6 +9,10 @@ def calc_retrieval_score(result, rel_map: dict, negrel_map: dict, score_name: st
         mrr = 0.0
         q_len = 0
         for q_row in result:
+            if len(q_row['ctxs']) == 0:
+                mrr += 1 if not rel_map[q_row['question']['id']] else 0
+                q_len += 1
+                continue
             rank = 1
             found = False
             for ctx in q_row['ctxs']:
@@ -24,6 +28,10 @@ def calc_retrieval_score(result, rel_map: dict, negrel_map: dict, score_name: st
         mean_bpref = 0.0
         q_len = 0
         for q_row in result:
+            if len(q_row['ctxs']) == 0:
+                mean_bpref += 1 if not rel_map[q_row['question']['id']] else 0
+                q_len += 1
+                continue
             R = 0.0
             negrel_cumsum = 0.0
             n_above_r = []
@@ -40,12 +48,19 @@ def calc_retrieval_score(result, rel_map: dict, negrel_map: dict, score_name: st
             bpref = bpref/R if R > 0 else 0.0
             mean_bpref += bpref
             q_len+=1
-        mean_bpref /= q_len
+        if q_len > 0:
+            mean_bpref /= q_len
+        else:
+            mean_bpref = 0
         return mean_bpref
     elif score_name == 'map':
         map_score = 0.0
         q_len = 0
         for q_row in result:
+            if len(q_row['ctxs']) == 0:
+                map_score += 1 if not rel_map[q_row['question']['id']] else 0
+                q_len += 1
+                continue
             q_len += 1
             Rq = 0.0
             Dq = 0.0
@@ -57,34 +72,32 @@ def calc_retrieval_score(result, rel_map: dict, negrel_map: dict, score_name: st
                     total_ap += Rq/Dq
             total_ap = total_ap/Rq if Rq > 0 else 0.0
             map_score += total_ap
-        map_score /= q_len
+        if q_len > 0:
+            map_score /= q_len
+        else:
+            map_score = 0
         return map_score
-    elif score_name == 'recall':
-        mean_recall = 0.0
-        q_len = 0
-        for q_row in result:
-            q_len += 1
-            R = len(rel_map[q_row['question']['id']])
-            recall = 0.0
-            for ctx in q_row['ctxs']:
-                recall += 1 if ctx['id'] in rel_map[q_row['question']['id']] else 0
-            recall = recall/R if R > 0 else 0
-            mean_recall += recall
-        mean_recall /= q_len
-        return mean_recall
     else:
         mean_precision = 0.0
         q_len = 0
         for q_row in result:
+            if len(q_row['ctxs']) == 0:
+                mean_precision += 1 if not rel_map[q_row['question']['id']] else 0
+                q_len += 1
+                continue
             number_of_passages  = 0
             precision = 0.0
             for ctx in q_row['ctxs']:
                 precision += 1 if ctx['id'] in rel_map[q_row['question']['id']] else 0
                 number_of_passages += 1
-            precision /= number_of_passages
+            
+            precision /= number_of_passages 
             mean_precision += precision
             q_len += 1
-        mean_precision /= q_len
+        if q_len > 0:
+            mean_precision /= q_len
+        else:
+            mean_precision = 0
         return mean_precision
 
 def eval_results(actual_results: list, gold_results: list, statistical_test_file=None):

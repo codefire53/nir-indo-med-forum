@@ -25,6 +25,9 @@ from typing import Tuple
 from torch import nn
 from torch import Tensor as T
 
+
+import transformers
+
 from dpr.models import init_biencoder_components
 from dpr.models.biencoder import BiEncoder, BiEncoderNllLoss, BiEncoderBatch
 from dpr.options import add_encoder_params, add_training_params, setup_args_gpu, set_seed, print_args, \
@@ -33,6 +36,7 @@ from dpr.utils.data_utils import ShardedDataIterator, read_data_from_json_files,
 from dpr.utils.dist_utils import all_gather_list
 from dpr.utils.model_utils import setup_for_distributed_mode, move_to_device, get_schedule_linear, CheckpointState, \
     get_model_file, get_model_obj, load_states_from_checkpoint
+import matplotlib.pyplot as plt
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -79,6 +83,8 @@ class BiEncoderTrainer(object):
         self.best_validation_result = None
         self.best_cp_name = None
         self.restart = self.args.restart
+        self.train_losses = []
+        self.val_losses = []
         if saved_state:
             self._load_saved_state(saved_state)
 
@@ -97,6 +103,17 @@ class BiEncoderTrainer(object):
                                    batch_size=batch_size, shuffle=shuffle, shuffle_seed=shuffle_seed, offset=offset,
                                    strict_batch_size=True,  # this is not really necessary, one can probably disable it
                                    )
+    
+    def visualize_loss(self, save_dir, train_losses, val_losses, n_epoch):
+        plt.figure()
+        n_epochs = list(range(n_epoch))
+        plt.plot(n_epochs, train_losses, label='training loss')
+        plt.plot(n_epochs, val_losses, label='validation loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.savefig(os.path.join(save_dir, 'epoch.png'))
+
 
     def run_train(self):
         args = self.args
@@ -128,11 +145,16 @@ class BiEncoderTrainer(object):
         for epoch in range(self.start_epoch, int(args.num_train_epochs)):
             logger.info("***** Epoch %d *****", epoch)
             self._train_epoch(scheduler, epoch, eval_step, train_iterator)
+            if args.plotting_dir is not None:
+                self.visualize_loss(args.plotting_dir, self.train_losses, self.val_losses, epoch+1)
 
         if args.local_rank in [-1, 0]:
             logger.info('Training finished. Best validation checkpoint %s', self.best_cp_name)
 
-    def validate_and_save(self, epoch: int, iteration: int, scheduler):
+        if args.plotting_dir is not None:
+            self.visualize_loss(args.plotting_dir, self.train_losses, self.val_losses, int(args.num_train_epochs))
+    
+    def validate_and_save(self, epoch: int, iteration: int, scheduler) -> float:
         args = self.args
         # for distributed mode, save checkpoint for only one process
         save_cp = args.local_rank in [-1, 0]
@@ -153,7 +175,7 @@ class BiEncoderTrainer(object):
                 self.best_validation_result = validation_loss
                 self.best_cp_name = cp_name
                 logger.info('New Best validation checkpoint %s', cp_name)
-
+        return validation_loss
 
     def validate_nll(self) -> float:
         logger.info('NLL validation ...')
@@ -356,22 +378,19 @@ class BiEncoderTrainer(object):
                 logger.info('Avg. loss per last %d batches: %f', rolling_loss_step, latest_rolling_train_av_loss)
                 rolling_train_loss = 0.0
 
-            if data_iteration % eval_step == 0:
-                logger.info('Validation: Epoch: %d Step: %d/%d', epoch, data_iteration, epoch_batches)
-                self.validate_and_save(epoch, train_data_iterator.get_iteration(), scheduler)
-                self.biencoder.train()
-
-        self.validate_and_save(epoch, data_iteration, scheduler)
-
+        val_loss = self.validate_and_save(epoch, data_iteration, scheduler)
+        logger.info('Validation: Epoch: %d, Loss: %f', epoch, val_loss)
         epoch_loss = (epoch_loss / epoch_batches) if epoch_batches > 0 else 0
         logger.info('Av Loss per epoch=%f', epoch_loss)
         logger.info('epoch total correct predictions=%d', epoch_correct_predictions)
-
+        self.train_losses.append(epoch_loss)
+        self.val_losses.append(val_loss)
+        self.biencoder.train()
+    
     def _save_checkpoint(self, scheduler, epoch: int, offset: int) -> str:
         args = self.args
         model_to_save = get_model_obj(self.biencoder)
-        cp = os.path.join(args.output_dir,
-                          args.checkpoint_file_name + '.' + str(epoch) + ('.' + str(offset) if offset > 0 else ''))
+        cp = os.path.join(args.output_dir, args.checkpoint_file_name + '.' + str(epoch) + ('.' + str(offset) if offset > 0 else ''))
 
         meta_params = get_encoder_params_state(args)
 
@@ -496,6 +515,7 @@ def _do_biencoder_fwd_pass(model: nn.Module, input: BiEncoderBatch, tensorizer: 
 
 
 def main():
+    transformers.logging.set_verbosity_error()
     parser = argparse.ArgumentParser()
 
     add_encoder_params(parser)
@@ -537,6 +557,8 @@ def main():
     parser.add_argument('--checkpoint_file_name', type=str, default='dpr_biencoder', help="Checkpoints file prefix")
 
     parser.add_argument("--restart", action='store_true', help="set true if you want to reset the optimizer and schedular states when you start fine-tuning from pre-trained models")
+    
+    parser.add_argument("--plotting_dir", type=str, default=None)
     args = parser.parse_args()
 
     if args.gradient_accumulation_steps < 1:

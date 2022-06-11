@@ -79,6 +79,7 @@ class MonoDataset(Dataset):
 
 def visualize_loss(save_dir, train_loss, val_loss, epoch):
     n_epoch  = list(range(epoch))
+    plt.figure()
     plt.plot(n_epoch, train_loss, label='training loss')
     plt.plot(n_epoch, val_loss, label='validation loss')
     plt.xlabel('Epoch')
@@ -90,7 +91,7 @@ def train(args):
     model  = AutoModelForSequenceClassification.from_pretrained(args.model_name_or_checkpoint_dir, num_labels=2, output_attentions=False, output_hidden_states=False)
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_checkpoint_dir, do_lower_case=True)
     model.to(args.device)
-    optimizer = AdamW(model.parameters(), lr=2e-5)
+    optimizer = AdamW(model.parameters(), lr=args.learning_rate)
     
     train_dataset = MonoDataset(tokenizer, args.train_file, args.max_seq_length)
     dev_dataset  = MonoDataset(tokenizer, args.dev_file, args.max_seq_length)
@@ -212,6 +213,7 @@ def main():
     parser.add_argument("--topk", type=int, default=10)
     parser.add_argument("--plotting_dir", type=str, default=None)
     parser.add_argument("--out_rerank_file", type=str, default="./monobert-rerank-results.json")
+    parser.add_argument("--learning_rate", default="2e-5", type=float)
 
     args = parser.parse_args()
     args.device = device

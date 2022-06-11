@@ -1,5 +1,6 @@
-from eval import calc_retrieval_score
-from hybrid_dpr_sparse.common import (
+
+import copy
+from common import (
     parse_corpus, join_results, add_bm25_score, add_classic_score, 
     add_lmd_score, rank_results, dot_product
 )
@@ -11,6 +12,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 from typing import List, Tuple, Dict, Iterator
+import sys
+sys.path.append('../../')
+from eval import calc_retrieval_score
 
 def add_dpr_score(results: list, pembeddings: str, qembeddings: str, alpha: float) -> list:
     pembeddings_map = dict()
@@ -49,7 +53,8 @@ def add_dpr_score(results: list, pembeddings: str, qembeddings: str, alpha: floa
             pid = p_row['id']
             p_vector = pembeddings_map[pid]
             dpr_score = (dot_product(q_vector, p_vector)-min_dpr_score)/max_dpr_score
-            results[q_idx]['ctxs'][p_idx]['total_score'] =  (1-alpha)*results[q_idx]['ctxs'][p_idx]['total_score']+alpha*dpr_score
+            results[q_idx]['ctxs'][p_idx]['dpr_score'] =  dpr_score
+            results[q_idx]['ctxs'][p_idx]['total_score'] =  (1-alpha)*results[q_idx]['ctxs'][p_idx]['sparse_score']+alpha*dpr_score
     return results
 
 
@@ -85,6 +90,7 @@ def main():
     parser.add_argument("--corpus", type=str, required=True)
     parser.add_argument("--topk", default=10, type=int)
     parser.add_argument("--eval_file", type=str, required=True)
+    parser.add_argument("--fine_tune_data", type=str, default='tydi')
     args = parser.parse_args()
     best_bm25_alpha = 0.9
     best_lmd_alpha = 0.1
@@ -100,19 +106,19 @@ def main():
         'map': []
     }
     all_scores = {
-        'bm25': scores_dict,
-        'lmd': scores_dict,
-        'tfidf': scores_dict
+        'bm25': copy.deepcopy(scores_dict),
+        'lmd': copy.deepcopy(scores_dict),
+        'tfidf': copy.deepcopy(scores_dict)
     }
 
     if args.bm25_query_result:
         print("Evaluate BM25-DPR")
         combined_query_results = join_results(args.dpr_query_result, args.bm25_query_result)
         combined_query_results = add_bm25_score(combined_query_results, corpus)
-        
         #Hyperparameter tuning
         best_score = -float('inf')
         for alpha in alphas:
+
             query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, alpha)
             query_results = rank_results(query_results, args.topk)
             precision, mrr, bpref, map_score = get_eval_scores(query_results, gold_results)
@@ -127,7 +133,7 @@ def main():
 
         query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_bm25_alpha)
         query_results = rank_results(query_results, args.topk)
-        with open("dpr-bm25_query_results.json", 'w') as f:
+        with open(f"dpr-bm25_query_results_{args.fine_tune_data}.json", 'w') as f:
             json.dump(query_results, f)
         print(f"Best BM25 alpha: {best_bm25_alpha}")
 
@@ -135,6 +141,7 @@ def main():
         print("Evaluate LMDirichlet-DPR")
         combined_query_results = join_results(args.dpr_query_result, args.lmd_query_result)
         combined_query_results = add_lmd_score(combined_query_results, corpus)
+
         #hyperparameter tuning
         best_score = -float('inf')
         for alpha in alphas:
@@ -152,7 +159,7 @@ def main():
 
         query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_lmd_alpha)
         query_results = rank_results(query_results, args.topk)
-        with open("dpr-lmd_query_results.json", 'w') as f:
+        with open(f"dpr-lmd_query_results_{args.fine_tune_data}.json", 'w') as f:
             json.dump(query_results, f)
         print(f"Best LMDirichlet alpha: {best_lmd_alpha}")
 
@@ -160,6 +167,7 @@ def main():
         print("Evaluate TFIDF-DPR")
         combined_query_results = join_results(args.dpr_query_result, args.classic_query_result)
         combined_query_results = add_classic_score(combined_query_results, corpus)
+
         #hyperparameter tuning
         best_score = -float('inf')
         for alpha in alphas:
@@ -177,7 +185,7 @@ def main():
         print(best_tfidf_alpha)
         query_results = add_dpr_score(combined_query_results, args.pembeddings, args.qembeddings, best_tfidf_alpha)
         query_results = rank_results(query_results, args.topk)
-        with open("dpr-classic_query_results.json", 'w') as f:
+        with open(f"dpr-classic_query_results_{args.fine_tune_data}.json", 'w') as f:
             json.dump(query_results, f)
         print(f"Best TFIDF alpha: {best_tfidf_alpha}")
     fig, axs = plt.subplots(len(all_scores.keys())+1, len(all_scores.values())+1)

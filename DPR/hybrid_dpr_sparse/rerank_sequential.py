@@ -1,5 +1,4 @@
-from eval import calc_retrieval_score
-from hybrid_dpr_sparse.common import  (
+from common import  (
     parse_corpus, add_bm25_score, add_lmd_score, add_classic_score, dot_product, rank_results
 )
 import argparse
@@ -53,6 +52,7 @@ def main():
     parser.add_argument("--corpus", type=str, default=None)
     parser.add_argument("--topk", default=10, type=int)
     parser.add_argument("--sparse_type", default="bm25", choices=["bm25","classic", "lmd"])
+    parser.add_argument("--fine_tune_data", type=str, default='tydi')
 
     args = parser.parse_args()
 
@@ -68,7 +68,7 @@ def main():
         else:
             rerank_results = add_classic_score(retrieval_results, corpus)
         rerank_results = rank_results(rerank_results, args.topk)
-        with open(f"retrieve-dpr_rerank-{args.sparse_type}_results.json", 'w') as f:
+        with open(f"retrieve-dpr_rerank-{args.sparse_type}_results_{args.fine_tune_data}.json", 'w') as f:
             json.dump(rerank_results, f)
     
     else:
@@ -77,7 +77,7 @@ def main():
             retrieval_results = json.load(f)
         rerank_results = add_dpr_score(retrieval_results, args.pembeddings, args.qembeddings)
         rerank_results = rank_results(rerank_results, args.topk)
-        with open(f"retrieve-{args.sparse_type}_rerank-dpr_results.json", 'w') as f:
+        with open(f"retrieve-{args.sparse_type}_rerank-dpr_results_{args.fine_tune_data}.json", 'w') as f:
             json.dump(rerank_results, f)
         
 if __name__ == '__main__':

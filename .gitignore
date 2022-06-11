@@ -128,4 +128,26 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-./Dataset/Embeddings
+# Ignore several folders
+./Dataset/**/*
+./Figures/**/*
+./ID-Stopwords/**/*
+
+
+
+# Ignore datasets
+*.json
+*.csv
+*.tsv
+*.jsonl
+*.xlsx
+*.xls
+*.txt
+*.xml
+*.swp
+
+# Ignore picts
+*.png
+*.jpeg
+*.jpg
+*.pdf
